@@ -14,6 +14,9 @@ if (!AGENTMAIL_API_KEY) {
 const SUPPORT_USERNAME = process.env.SUPPORT_INBOX_USERNAME || 'support';
 const BILLING_USERNAME = process.env.BILLING_INBOX_USERNAME || 'billing';
 const HR_USERNAME = process.env.HR_INBOX_USERNAME || 'hr';
+const ROUTED_DEPARTMENT_COPY_MODE =
+  process.env.ROUTED_DEPARTMENT_COPY_MODE?.toLowerCase() === 'cc' ? 'cc' : 'bcc';
+const WS_OPEN_TIMEOUT_MS = Number(process.env.WS_OPEN_TIMEOUT_MS || '15000');
 
 let SUPPORT_INBOX = `${SUPPORT_USERNAME}@agentmail.to`;
 let BILLING_INBOX = `${BILLING_USERNAME}@agentmail.to`;
@@ -48,6 +51,10 @@ function log(label: string, message: string) {
 
 function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 8);
+}
+
+function departmentCopyRecipients(deptInbox: string): { cc?: string[]; bcc?: string[] } {
+  return ROUTED_DEPARTMENT_COPY_MODE === 'cc' ? { cc: [deptInbox] } : { bcc: [deptInbox] };
 }
 
 async function findInboxByClientId(clientId: string): Promise<string | null> {
@@ -135,12 +142,27 @@ async function handleSupportEmail(msg: AgentMail.Message) {
   );
 
   try {
-    await client.inboxes.messages.send(deptInbox, {
-      to: [senderEmail],
-      subject: `Re: ${subject}`,
-      text: response.text,
-    });
-    log(`[${department}]`, `Reply sent from ${deptInbox} to ${senderEmail}`);
+    const copyRecipients = departmentCopyRecipients(deptInbox);
+
+    if (msg.messageId) {
+      await client.inboxes.messages.reply(SUPPORT_INBOX, msg.messageId, {
+        to: [senderEmail],
+        text: response.text,
+        ...copyRecipients,
+      });
+    } else {
+      await client.inboxes.messages.send(SUPPORT_INBOX, {
+        to: [senderEmail],
+        subject: `Re: ${subject}`,
+        text: response.text,
+        ...copyRecipients,
+      });
+    }
+
+    log(
+      `[${department}]`,
+      `Reply sent from ${SUPPORT_INBOX} to ${senderEmail} (${ROUTED_DEPARTMENT_COPY_MODE}: ${deptInbox})`,
+    );
   } catch (err) {
     log('[error]', `Failed to send reply: ${err}`);
   }
@@ -200,20 +222,60 @@ async function main() {
   console.log('');
   log('[ws]', 'Connecting to AgentMail WebSocket...');
 
-  const socket = await client.websockets.connect();
+  const socket = await client.websockets.connect({
+    apiKey: AGENTMAIL_API_KEY,
+    reconnectAttempts: 2,
+  });
 
-  socket.on('open', () => {
-    log('[ws]', 'Connected');
-
+  let subscribedForCurrentConnection = false;
+  const subscribeToInboxes = () => {
+    if (subscribedForCurrentConnection) return;
     socket.sendSubscribe({
       type: 'subscribe',
       inboxIds: [SUPPORT_INBOX, BILLING_INBOX, HR_INBOX],
       eventTypes: ['message.received'],
     });
+    subscribedForCurrentConnection = true;
+  };
+
+  let startupSettled = false;
+  let startupResolve: (() => void) | null = null;
+  let startupReject: ((reason?: unknown) => void) | null = null;
+
+  const startupReady = new Promise<void>((resolve, reject) => {
+    startupResolve = resolve;
+    startupReject = reject;
   });
+
+  const startupTimer = setTimeout(() => {
+    if (startupSettled) return;
+    startupSettled = true;
+    startupReject?.(
+      new Error(
+        `WebSocket did not subscribe within ${WS_OPEN_TIMEOUT_MS}ms. Check AGENTMAIL_API_KEY and network/firewall/VPN settings.`,
+      ),
+    );
+  }, WS_OPEN_TIMEOUT_MS);
+
+  socket.on('open', () => {
+    log('[ws]', 'Connected');
+    subscribeToInboxes();
+  });
+
+  // Handle race where socket opens before handlers are attached.
+  if (socket.readyState === 1) {
+    log('[ws]', 'Connected');
+    subscribeToInboxes();
+  }
 
   socket.on('message', async (event) => {
     if (event.type === 'subscribed') {
+      if (!startupSettled) {
+        startupSettled = true;
+        clearTimeout(startupTimer);
+        startupResolve?.();
+      }
+
       log('[ws]', `Subscribed to: ${event.inboxIds?.join(', ')}`);
       console.log('');
       console.log(`  Send emails to: ${SUPPORT_INBOX}`);
@@ -258,11 +320,26 @@ async function main() {
 
   socket.on('error', (error) => {
     log('[error]', `WebSocket error: ${error}`);
+    if (!startupSettled) {
+      startupSettled = true;
+      clearTimeout(startupTimer);
+      startupReject?.(new Error(`WebSocket startup error: ${String(error)}`));
+    }
   });
 
   socket.on('close', (event) => {
     log('[ws]', `Disconnected: ${event?.code} ${event?.reason}`);
+    subscribedForCurrentConnection = false;
+    if (!startupSettled) {
+      startupSettled = true;
+      clearTimeout(startupTimer);
+      startupReject?.(
+        new Error(`WebSocket closed before subscribe: ${event?.code ?? 'unknown'} ${event?.reason ?? ''}`),
+      );
+    }
   });
+
+  await startupReady;
 }
 
 main().catch((err) => {

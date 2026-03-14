@@ -27,7 +27,7 @@ This template gives you:
 2. Listener receives `message.received` from AgentMail WebSocket
 3. `triageAgent` classifies request into `billing` or `hr`
 4. Chosen department agent generates response and can call its tools
-5. Reply is sent from department inbox (`billing@...` or `hr@...`)
+5. Reply is sent from support inbox in the same thread, while routed department inbox is copied (`bcc` by default)
 
 Direct department emails also work:
 
@@ -100,6 +100,7 @@ OPENAI_API_KEY=your-openai-key
 AGENTMAIL_API_KEY=your-agentmail-key
 COMPANY_NAME=Your Company Name
 COMPANY_EMAIL_DOMAIN=yourcompany.com
+ROUTED_DEPARTMENT_COPY_MODE=bcc
 
 SUPPORT_INBOX_USERNAME=support
 BILLING_INBOX_USERNAME=billing
@@ -111,6 +112,7 @@ Notes:
 - Usernames are preferred values, not guaranteed.
 - If a username is globally taken, the listener auto-creates a unique fallback username for your account.
 - Always use the inbox IDs printed in listener logs.
+- `ROUTED_DEPARTMENT_COPY_MODE` accepts `bcc` (default) or `cc`.
 
 ## Local Development Guide
 
@@ -150,7 +152,7 @@ Expected:
 
 - Triage routes to billing
 - Billing agent may call invoice/refund tool
-- Reply is sent from billing inbox
+- Reply is sent from support inbox and billing inbox is copied on-thread
 
 ### Scenario 2: Support -> HR routing
 
@@ -162,7 +164,7 @@ Expected:
 
 - Triage routes to HR
 - HR agent may call offer-letter tool
-- Reply is sent from HR inbox
+- Reply is sent from support inbox and HR inbox is copied on-thread
 
 ### Scenario 3: Direct department handling
 
