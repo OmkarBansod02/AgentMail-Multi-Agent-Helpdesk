@@ -98,6 +98,8 @@ cp .env.example .env
 ```env
 OPENAI_API_KEY=your-openai-key
 AGENTMAIL_API_KEY=your-agentmail-key
+COMPANY_NAME=Your Company Name
+COMPANY_EMAIL_DOMAIN=yourcompany.com
 
 SUPPORT_INBOX_USERNAME=support
 BILLING_INBOX_USERNAME=billing

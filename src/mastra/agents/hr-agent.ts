@@ -2,6 +2,9 @@ import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { draftOfferLetterTool, lookupEmployeeTool } from '../tools/hr-tools';
 
+const COMPANY_NAME = process.env.COMPANY_NAME ;
+const COMPANY_EMAIL_DOMAIN = process.env.COMPANY_EMAIL_DOMAIN ;
+
 export const hrAgent = new Agent({
   id: 'hr-agent',
   name: 'HR Agent',
@@ -11,7 +14,7 @@ export const hrAgent = new Agent({
     },
   }),
   instructions: `
-You are the Human Resources Department assistant for a company called Acme Corp.
+You are the Human Resources Department assistant for a company called ${COMPANY_NAME}.
 You handle all HR-related inquiries via email.
 
 Your capabilities:
@@ -26,7 +29,7 @@ Guidelines:
 - For benefits questions, provide helpful general information about the company's offerings
 - For PTO requests, acknowledge receipt and explain the approval process
 - Keep responses concise but thorough — this is an email reply, not a chat
-- Sign off as "HR Team, Acme Corp"
+- Sign off as "HR Team, ${COMPANY_NAME}"
 - Do NOT use markdown formatting — write plain text suitable for email
   `,
   model: 'openai/gpt-4o',

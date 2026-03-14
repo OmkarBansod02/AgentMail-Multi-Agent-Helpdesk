@@ -1,6 +1,9 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+const COMPANY_NAME = process.env.COMPANY_NAME ;
+const COMPANY_EMAIL_DOMAIN = process.env.COMPANY_EMAIL_DOMAIN ;
+
 export const draftOfferLetterTool = createTool({
   id: 'draft-offer-letter',
   description:
@@ -24,7 +27,7 @@ Date: ${new Date().toISOString().split('T')[0]}
 
 Dear ${inputData.candidateName},
 
-We are pleased to offer you the position of ${inputData.position} at Acme Corp.
+We are pleased to offer you the position of ${inputData.position} at ${COMPANY_NAME}.
 
 Compensation: $${inputData.salary.toLocaleString()} per year
 Start Date: ${inputData.startDate}
@@ -43,7 +46,7 @@ We are excited to welcome you to the team!
 
 Best regards,
 HR Department
-Acme Corp
+${COMPANY_NAME}
     `.trim();
 
     return {
@@ -76,7 +79,7 @@ export const lookupEmployeeTool = createTool({
     return {
       employeeId: inputData.employeeId || `EMP-${Math.floor(Math.random() * 9000) + 1000}`,
       name,
-      email: `${name.toLowerCase().replace(/\s+/g, '.')}@acmecorp.com`,
+      email: `${name.toLowerCase().replace(/\s+/g, '.')}@${COMPANY_EMAIL_DOMAIN}`,
       department: 'Engineering',
       position: 'Senior Software Engineer',
       startDate: '2024-06-15',
